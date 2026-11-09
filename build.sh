@@ -7,10 +7,16 @@ APP="build/Amplify.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -parse-as-library -swift-version 5 \
-  -target "$(uname -m)-apple-macos26.0" \
-  -framework SwiftUI -framework AppKit -framework CoreAudio -framework AudioToolbox -framework ServiceManagement \
-  Sources/*.swift -o "$APP/Contents/MacOS/Amplify"
+# Universal binary (Apple silicon + Intel). macOS 14.2 is the first release with process taps.
+MIN_MACOS=14.2
+for ARCH in arm64 x86_64; do
+  swiftc -O -parse-as-library -swift-version 5 \
+    -target "$ARCH-apple-macos$MIN_MACOS" \
+    -framework SwiftUI -framework AppKit -framework CoreAudio -framework AudioToolbox -framework ServiceManagement \
+    Sources/*.swift -o "build/Amplify-$ARCH"
+done
+lipo -create build/Amplify-arm64 build/Amplify-x86_64 -output "$APP/Contents/MacOS/Amplify"
+rm build/Amplify-arm64 build/Amplify-x86_64
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -22,9 +28,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.amplify.menubar</string>
   <key>CFBundleExecutable</key><string>Amplify</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>LSMinimumSystemVersion</key><string>26.0</string>
+  <key>CFBundleShortVersionString</key><string>1.1</string>
+  <key>CFBundleVersion</key><string>2</string>
+  <key>LSMinimumSystemVersion</key><string>14.2</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAudioCaptureUsageDescription</key>

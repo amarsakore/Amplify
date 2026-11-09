@@ -1,6 +1,6 @@
 # Amplify
 
-A small macOS menu bar app that boosts your Mac's volume beyond 100% and lets you switch output devices — styled like the Control Center Sound module, with native Liquid Glass.
+A small macOS menu bar app that boosts your Mac's volume beyond 100% and lets you switch output devices — styled like the Control Center Sound module, with native Liquid Glass on macOS 26 and the standard frosted panel on earlier versions.
 
 ## Features
 
@@ -14,7 +14,10 @@ A small macOS menu bar app that boosts your Mac's volume beyond 100% and lets yo
 
 ## Requirements
 
-macOS 26 (Tahoe) or later, Apple silicon.
+- macOS 14.2 (Sonoma) or later — the first release with Core Audio process taps
+- Apple silicon or Intel (universal app)
+
+Liquid Glass is used on macOS 26 (Tahoe) and later; older versions get the system's frosted popover material.
 
 ## Install
 
@@ -30,7 +33,7 @@ Right-click the menu bar icon for Launch at Login and Quit.
 
 ## Build from source
 
-Needs the Xcode Command Line Tools (Swift 6) and the macOS 26 SDK.
+Needs the Xcode Command Line Tools (Swift 6) with the macOS 26 SDK or newer. `build.sh` produces a universal binary that runs on macOS 14.2+.
 
 ```bash
 ./build.sh

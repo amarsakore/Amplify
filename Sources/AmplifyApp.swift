@@ -116,12 +116,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                       onSizeChange: { [weak self] in self?.contentSizeChanged($0) })
                 .environment(audio)))
 
-        glass = NSGlassEffectView()
-        glass.cornerRadius = Self.corner
-        glass.style = .regular
         // No safe-area insets: otherwise SwiftUI pads the content and it overflows the glass.
         hosting.safeAreaRegions = []
-        glass.contentView = hosting
+        if #available(macOS 26.0, *) {
+            let g = NSGlassEffectView()
+            g.cornerRadius = Self.corner
+            g.style = .regular
+            g.contentView = hosting
+            glass = g
+        } else {
+            // Older macOS: the frosted material used by system popovers and Control Center.
+            let v = NSVisualEffectView()
+            v.material = .popover
+            v.blendingMode = .behindWindow
+            v.state = .active
+            v.wantsLayer = true
+            v.layer?.cornerRadius = Self.corner
+            v.layer?.cornerCurve = .continuous
+            v.layer?.masksToBounds = true
+            hosting.frame = v.bounds
+            v.addSubview(hosting)
+            glass = v
+        }
         glass.autoresizingMask = [.width, .height]
         hosting.autoresizingMask = [.width, .height]
 
@@ -142,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let corner: CGFloat = 16
     private static let margin: CGFloat = 24   // transparent room around the glass for the shadow
-    private var glass: NSGlassEffectView!
+    private var glass: NSView!
     private var shadow: NSView!
 
     /// Latest SwiftUI content size, reported live by PanelView.

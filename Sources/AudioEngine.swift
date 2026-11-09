@@ -1,7 +1,6 @@
 import Foundation
 import CoreAudio
 import AudioToolbox
-import Synchronization
 
 // MARK: - Core Audio helpers
 
@@ -185,10 +184,20 @@ enum DSP {
 
 // MARK: - Lock-free FIFO between the tap (producer) and the output device (consumer)
 
+/// Single-writer counter shared between two audio threads (works back to macOS 14, unlike
+/// Swift's `Atomic`). Aligned word loads/stores are atomic on arm64 and x86_64; the barriers
+/// make the sample data visible before the new count is.
+final class SharedCount {
+    private let p: UnsafeMutablePointer<Int> = { let p = UnsafeMutablePointer<Int>.allocate(capacity: 1); p.initialize(to: 0); return p }()
+    deinit { p.deallocate() }
+    @inline(__always) func load() -> Int { let v = p.pointee; OSMemoryBarrier(); return v }
+    @inline(__always) func store(_ v: Int) { OSMemoryBarrier(); p.pointee = v }
+}
+
 final class AudioFIFO {
     static let capacity = 1 << 14          // frames (stereo), ~340 ms at 48 kHz
     let data: UnsafeMutablePointer<Float>
-    let written = Atomic<Int>(0)           // total frames produced
+    let written = SharedCount()           // total frames produced
     var read = 0                           // consumer only
     var target = 0                         // consumer only: frames kept queued
     var primed = false                     // consumer only
@@ -199,7 +208,7 @@ final class AudioFIFO {
     }
     deinit { data.deallocate() }
 
-    func reset() { written.store(0, ordering: .releasing); read = 0; primed = false; target = 0 }
+    func reset() { written.store(0); read = 0; primed = false; target = 0 }
 
     /// Producer: append the tap's input (any channel layout → stereo).
     func push(_ inData: UnsafePointer<AudioBufferList>) {
@@ -215,7 +224,7 @@ final class AudioFIFO {
             if ins.count >= 2, let d1 = ins[1].mData { b = d1.assumingMemoryBound(to: Float.self) }
         }
         let mask = Self.capacity - 1
-        var w = written.load(ordering: .relaxed)
+        var w = written.load()
         for i in 0..<frames {
             let j = (w & mask) * 2
             let l = a[i * stride]
@@ -223,7 +232,7 @@ final class AudioFIFO {
             data[j + 1] = ch >= 2 ? a[i * stride + 1] : (b?[i] ?? l)
             w += 1
         }
-        written.store(w, ordering: .releasing)
+        written.store(w)
     }
 }
 
@@ -359,7 +368,7 @@ final class TapEngine {
 
     /// Pulls one output buffer's worth from the FIFO, keeping just enough queued to never run dry.
     private static func consume(_ f: AudioFIFO, out: DSP.Out, base: Int, _ p: UnsafeMutablePointer<Float>) {
-        let w = f.written.load(ordering: .acquiring)
+        let w = f.written.load()
         let mask = AudioFIFO.capacity - 1
         if f.target == 0 { f.target = base }
         var avail = w - f.read
